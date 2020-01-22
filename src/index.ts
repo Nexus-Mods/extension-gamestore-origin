@@ -178,10 +178,14 @@ class OriginLauncher implements types.IGameStore {
                 const gamePath = query.dipinstallpath as string;
                 const appid = query.id as string;
                 const installerFilepath = path.join(gamePath, INSTALLER_DATA);
-                return Promise.any([this.getGameNameDiP(installerFilepath, 'utf-8'),
-                                    this.getGameNameDiP(installerFilepath, 'utf16le'),
-                                    this.getGameName(installerFilepath, 'utf-8'),
-                                    this.getGameName(installerFilepath, 'utf16le')])
+
+                // Uninstalling Origin games does NOT remove manifest files, we need
+                //  to ensure that the installer data file exists before we do anything.
+                return fs.statAsync(installerFilepath).then(() =>
+                  Promise.any([this.getGameNameDiP(installerFilepath, 'utf-8'),
+                               this.getGameNameDiP(installerFilepath, 'utf16le'),
+                               this.getGameName(installerFilepath, 'utf-8'),
+                               this.getGameName(installerFilepath, 'utf16le')]))
                   .then(name => {
                     // We found the name.
                     const launcherEntry: types.IGameStoreEntry = {
@@ -192,6 +196,13 @@ class OriginLauncher implements types.IGameStore {
                     return accum;
                   })
                   .catch(err => {
+                    if ((err.code === 'ENOENT')
+                      && (err.message.indexOf(installerFilepath)) !== -1) {
+                        // Game does not appear to be installed...
+                        // tslint:disable-next-line: max-line-length
+                        log('debug', 'Origin game manifest found, but does not appear to be installed', appid);
+                        return accum;
+                    }
                     const meta = Array.isArray(err)
                       ? err.map(errInst => errInst.message).join(';')
                       : err;
