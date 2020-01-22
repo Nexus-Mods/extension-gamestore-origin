@@ -32,11 +32,6 @@ export class MissingXMLElementError extends Error {
   }
 }
 
-/**
- * very limited functionality atm because so far the only source of information
- * I found was this ini file, and it contains no meta data about the games, not
- * even the installation path
- */
 class OriginLauncher implements types.IGameStore {
   public id: string;
   private mClientPath: Promise<string>;
@@ -76,11 +71,6 @@ class OriginLauncher implements types.IGameStore {
     return this.mClientPath;
   }
 
-  /**
-   * test if a game is installed through the launcher.
-   * Please keep in mind that epic seems to internally give third-party games animal names. Kinky.
-   * @param name
-   */
   public isGameInstalled(name: string): Promise<boolean> {
     return this.findByName(name)
       .then(() => Promise.resolve(true))
