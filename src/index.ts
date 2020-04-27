@@ -77,11 +77,16 @@ class OriginLauncher implements types.IGameStore {
       .catch(err => Promise.resolve(false));
   }
 
-  public findByAppId(appId): Promise<types.IGameStoreEntry> {
+  public findByAppId(appId: string | string[]): Promise<types.IGameStoreEntry> {
+    const matcher = Array.isArray(appId)
+      ? (entry: types.IGameStoreEntry) => (appId.includes(entry.appid))
+      : (entry: types.IGameStoreEntry) => (appId === entry.appid);
+
     return this.allGames()
-      .then(entries => entries.find(entry => entry.appid === appId))
+      .then(entries => entries.find(matcher))
       .then(entry => entry === undefined
-        ? Promise.reject(new types.GameEntryNotFound(appId, STORE_ID))
+        ? Promise.reject(new types.GameEntryNotFound(Array.isArray(appId)
+            ? appId.join(', ') : appId, STORE_ID))
         : Promise.resolve(entry));
   }
 
@@ -92,6 +97,12 @@ class OriginLauncher implements types.IGameStore {
       .then(entry => entry === undefined
         ? Promise.reject(new types.GameEntryNotFound(namePattern, STORE_ID))
         : Promise.resolve(entry));
+  }
+
+  public getGameStorePath(): Promise<string> {
+    return (!!this.mClientPath)
+      ? this.mClientPath
+      : Promise.resolve(undefined);
   }
 
   public allGames(): Promise<types.IGameStoreEntry[]> {
