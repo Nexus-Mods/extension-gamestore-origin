@@ -162,13 +162,15 @@ class OriginLauncher implements types.IGameStore {
 
   private parseLocalContent(): Promise<types.IGameStoreEntry[]> {
     const localData = path.join(ORIGIN_DATAPATH, 'LocalContent');
-    return fs.statAsync(localData)
-      .then(() => new Promise((resolve, reject) => {
-        turbowalk(localData, entries => {
+    const allEntries: IEntry[] = [];
+    return turbowalk(localData, entries => {
+      allEntries.push(...entries);
+    })
+      .then(() => {
         // Each game can have multiple manifest files (DLC and stuff)
         //  but only 1 manifest inside each game folder will have the
         //  game's installation path.
-        const manifests = entries.filter(manifest =>
+        const manifests = allEntries.filter(manifest =>
           path.extname(manifest.filePath) === MANIFEST_EXT);
 
         return Promise.reduce(manifests, (accum: types.IGameStoreEntry[], manifest: IEntry) =>
@@ -210,10 +212,10 @@ class OriginLauncher implements types.IGameStore {
                     .catch(err => {
                       if ((err.code === 'ENOENT')
                         && (err.message.indexOf(installerFilepath)) !== -1) {
-                          // Game does not appear to be installed...
-                          // tslint:disable-next-line: max-line-length
-                          log('debug', 'Origin game manifest found, but does not appear to be installed', appid);
-                          return accum;
+                        // Game does not appear to be installed...
+                        // tslint:disable-next-line: max-line-length
+                        log('debug', 'Origin game manifest found, but does not appear to be installed', appid);
+                        return accum;
                       }
                       const meta = Array.isArray(err)
                         ? err.map(errInst => errInst.message).join(';')
@@ -225,11 +227,15 @@ class OriginLauncher implements types.IGameStore {
                 }
               }
               return accum;
-            }), [])
-            // tslint:disable-next-line: no-shadowed-variable
-            .then(entries => resolve(entries));
-        });
-    })).catch(err => Promise.resolve([]));
+            }), []);
+      })
+      .catch(err => {
+        // ENOENT probably just means origin is not installed
+        if (!['ENOTFOUND', 'ENOENT'].includes(err.code)) {
+          log('error', 'failed to read origin directory', { error: err.message, code: err.code });
+        }
+        return [];
+      });
   }
 }
 
