@@ -112,6 +112,13 @@ class OriginLauncher implements types.IGameStore {
     return this.mCache;
   }
 
+  public reloadGames(): Promise<void> {
+    return new Promise((resolve) => {
+      this.mCache = this.parseLocalContent();
+      return resolve();
+    });
+  }
+
   // 3rd party game companies seem to generate their game
   //  "DiP" manifest using a tool called EAInstaller, this
   //  is the function we should be using _first_ when querying
