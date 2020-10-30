@@ -16,8 +16,6 @@ const MANIFEST_EXT = '.mfst';
 const INSTALLER_DATA = path.join('__Installer', 'installerdata.xml');
 const ORIGIN_DATAPATH = 'c:\\ProgramData\\Origin\\';
 
-const INSTALL_PATH_PATTERN = '&dipInstallPath=&dipinstallpath=';
-
 export class MissingXMLElementError extends Error {
   private mElementName: string;
   constructor(elementName: string) {
@@ -124,9 +122,9 @@ class OriginLauncher implements types.IGameStore {
   //  is the function we should be using _first_ when querying
   //  the game's name as most games would be developed by non-EA
   //  companies.
-  private getGameNameDiP(installerPath: string, encoding: string): Promise<string> {
+  private getGameNameDiP(installerPath: string): Promise<string> {
     const sanitizeRgx = /™/gi;
-    return fs.readFileAsync(installerPath, { encoding })
+    return fs.readFileAsync(installerPath)
       .then(installerData => {
         let xmlDoc;
         try {
@@ -143,9 +141,9 @@ class OriginLauncher implements types.IGameStore {
       });
   }
 
-  private getGameName(installerPath: string, encoding: string): Promise<string> {
+  private getGameName(installerPath: string): Promise<string> {
     const regex = /\<title\>|\<\/title\>|™/gi;
-    return fs.readFileAsync(installerPath, { encoding })
+    return fs.readFileAsync(installerPath)
       .then(installerData => {
         let xmlDoc;
         try {
@@ -183,55 +181,51 @@ class OriginLauncher implements types.IGameStore {
         return Promise.reduce(manifests, (accum: types.IGameStoreEntry[], manifest: IEntry) =>
           fs.readFileAsync(manifest.filePath, { encoding: 'utf-8' })
             .then(data => {
-              if (data.indexOf(INSTALL_PATH_PATTERN) !== -1) {
-                let query;
-                try {
-                  // Ignore the preceding '?'
-                  query = queryParser.parse(data.substr(1));
-                } catch (err) {
-                  log('error', 'failed to parse manifest file', err);
-                  return accum;
-                }
+              let query;
+              try {
+                // Ignore the preceding '?'
+                query = queryParser.parse(data.substr(1));
+              } catch (err) {
+                log('error', 'failed to parse manifest file', err);
+                return accum;
+              }
 
-                if (!!query.dipinstallpath && !!query.id) {
-                  // We have the installation path and the game's ID which we can
-                  //  use to launch the game, but we need the game's name as well.
-                  const gamePath = query.dipinstallpath as string;
-                  const appid = query.id as string;
-                  const installerFilepath = path.join(gamePath, INSTALLER_DATA);
+              if (!!query.dipinstallpath && !!query.id) {
+                // We have the installation path and the game's ID which we can
+                //  use to launch the game, but we need the game's name as well.
+                const gamePath = query.dipinstallpath as string;
+                const appid = query.id as string;
+                const installerFilepath = path.join(gamePath, INSTALLER_DATA);
 
-                  // Uninstalling Origin games does NOT remove manifest files, we need
-                  //  to ensure that the installer data file exists before we do anything.
-                  return fs.statAsync(installerFilepath).then(() =>
-                    Promise.any([this.getGameNameDiP(installerFilepath, 'utf-8'),
-                                this.getGameNameDiP(installerFilepath, 'utf16le'),
-                                this.getGameName(installerFilepath, 'utf-8'),
-                                this.getGameName(installerFilepath, 'utf16le')]))
-                    .then(name => {
-                      // We found the name.
-                      const launcherEntry: types.IGameStoreEntry = {
-                        name, appid, gamePath, gameStoreId: STORE_ID,
-                      };
+                // Uninstalling Origin games does NOT remove manifest files, we need
+                //  to ensure that the installer data file exists before we do anything.
+                return fs.statAsync(installerFilepath).then(() =>
+                  Promise.any([this.getGameNameDiP(installerFilepath),
+                               this.getGameName(installerFilepath)]))
+                  .then(name => {
+                    // We found the name.
+                    const launcherEntry: types.IGameStoreEntry = {
+                      name, appid, gamePath, gameStoreId: STORE_ID,
+                    };
 
-                      accum.push(launcherEntry);
+                    accum.push(launcherEntry);
+                    return accum;
+                  })
+                  .catch(err => {
+                    if ((err.code === 'ENOENT')
+                      && (err.message.indexOf(installerFilepath)) !== -1) {
+                      // Game does not appear to be installed...
+                      // tslint:disable-next-line: max-line-length
+                      log('debug', 'Origin game manifest found, but does not appear to be installed', appid);
                       return accum;
-                    })
-                    .catch(err => {
-                      if ((err.code === 'ENOENT')
-                        && (err.message.indexOf(installerFilepath)) !== -1) {
-                        // Game does not appear to be installed...
-                        // tslint:disable-next-line: max-line-length
-                        log('debug', 'Origin game manifest found, but does not appear to be installed', appid);
-                        return accum;
-                      }
-                      const meta = Array.isArray(err)
-                        ? err.map(errInst => errInst.message).join(';')
-                        : err;
+                    }
+                    const meta = Array.isArray(err)
+                      ? err.map(errInst => errInst.message).join(';')
+                      : err;
 
-                      log('error', `failed to find game name for ${appid}`, meta);
-                      return accum;
-                    });
-                }
+                    log('error', `failed to find game name for ${appid}`, meta);
+                    return accum;
+                  });
               }
               return accum;
             }), []);

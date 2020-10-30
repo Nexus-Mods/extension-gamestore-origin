@@ -1,7 +1,7 @@
 {
   "name": "gamestore-origin",
-  "version": "0.0.5",
-  "description": "Discovery and game launch support for the Origin game store",
+  "version": "0.1.0",
+  "description": "Discovery and game launch support for the Origin/EA game store",
   "main": "./out/index.js",
   "repository": "",
   "scripts": {
