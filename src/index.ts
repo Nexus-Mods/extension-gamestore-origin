@@ -1,4 +1,4 @@
-import * as bluebird from 'bluebird';
+import * as Bluebird from 'bluebird';
 import * as path from 'path';
 import * as winapi from 'winapi-bindings';
 
@@ -9,7 +9,6 @@ import * as queryParser from 'querystring';
 import turbowalk, { IEntry } from 'turbowalk';
 
 import { fs, log, types, util } from 'vortex-api';
-import Bluebird = require('bluebird');
 
 const STORE_ID = 'origin';
 const MANIFEST_EXT = '.mfst';
