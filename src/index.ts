@@ -1,14 +1,15 @@
-import * as Promise from 'bluebird';
+import * as bluebird from 'bluebird';
 import * as path from 'path';
 import * as winapi from 'winapi-bindings';
 
-import * as xmlParser from 'libxmljs';
+import { parseStringPromise } from 'xml2js';
 
 import * as queryParser from 'querystring';
 
 import turbowalk, { IEntry } from 'turbowalk';
 
 import { fs, log, types, util } from 'vortex-api';
+import Bluebird = require('bluebird');
 
 const STORE_ID = 'origin';
 const MANIFEST_EXT = '.mfst';
@@ -30,6 +31,12 @@ export class MissingXMLElementError extends Error {
   }
 }
 
+// 3rd party game companies seem to generate their game
+//  "DiP" manifest using a tool called EAInstaller, this
+//  is the function we should be using _first_ when querying
+//  the game's name as most games would be developed by non-EA
+//  companies.
+export declare type ManifestType = 'DiPManifest' | 'default';
 class OriginLauncher implements types.IGameStore {
   public id: string;
   private mClientPath: Promise<string>;
@@ -117,52 +124,26 @@ class OriginLauncher implements types.IGameStore {
     });
   }
 
-  // 3rd party game companies seem to generate their game
-  //  "DiP" manifest using a tool called EAInstaller, this
-  //  is the function we should be using _first_ when querying
-  //  the game's name as most games would be developed by non-EA
-  //  companies.
-  private getGameNameDiP(installerPath: string): Promise<string> {
-    const sanitizeRgx = /™/gi;
-    return fs.readFileAsync(installerPath)
-      .then(installerData => {
-        let xmlDoc;
-        try {
-          xmlDoc = xmlParser.parseXml(installerData);
-        } catch (err) {
-          return Promise.reject(err);
-        }
+  private async getGameName(installerPath: string, manifestType: ManifestType): Promise<string> {
+    const installerData = await fs.readFileAsync(installerPath)
+    let xmlDoc;
+    try {
+      xmlDoc = await parseStringPromise(installerData);
+    } catch (err) {
+      return Promise.reject(err);
+    }
 
-        const elements = xmlDoc.find('//DiPManifest/gameTitles/gameTitle');
-        const element = elements.find(entry => entry.attr('locale').value() === 'en_US');
-        return element !== undefined
-          ? Promise.resolve(element.text().replace(sanitizeRgx, ''))
-          : Promise.reject(new MissingXMLElementError('gameTitle(en_US)'));
-      });
-  }
-
-  private getGameName(installerPath: string): Promise<string> {
-    const regex = /\<title\>|\<\/title\>|™/gi;
-    return fs.readFileAsync(installerPath)
-      .then(installerData => {
-        let xmlDoc;
-        try {
-          xmlDoc = xmlParser.parseXml(installerData);
-        } catch (err) {
-          return Promise.reject(err);
-        }
-        const elements = xmlDoc.find('//game/metadata/localeInfo');
-        const element = elements.find(entry => entry.attr('locale').value() === 'en_US');
-        let name: string;
-        if (element !== undefined) {
-          name = element.find('title')[0].toString().replace('&amp;', '&');
-          name = name.replace(regex, '');
-        }
-
-        return name !== undefined
-          ? Promise.resolve(name)
-          : Promise.reject(new MissingXMLElementError('localeInfo(en_US)/title'));
-      });
+    const elements = (manifestType === 'default')
+      ? xmlDoc.game.metadata.localeInfo
+      : xmlDoc.DiPManifest.gameTitles[0].gameTitle;
+    for (const element of elements) {
+      if (element.$.locale === 'en_US') {
+        return (manifestType === 'default')
+          ? Promise.resolve(element.title)
+          : Promise.resolve(element._);
+      }
+    }
+    return Promise.reject(new MissingXMLElementError('gameTitle(en_US)'));
   }
 
   private parseLocalContent(): Promise<types.IGameStoreEntry[]> {
@@ -178,7 +159,7 @@ class OriginLauncher implements types.IGameStore {
         const manifests = allEntries.filter(manifest =>
           path.extname(manifest.filePath) === MANIFEST_EXT);
 
-        return Promise.reduce(manifests, (accum: types.IGameStoreEntry[], manifest: IEntry) =>
+        return Bluebird.reduce(manifests, (accum: types.IGameStoreEntry[], manifest: IEntry) =>
           fs.readFileAsync(manifest.filePath, { encoding: 'utf-8' })
             .then(data => {
               let query;
@@ -200,8 +181,8 @@ class OriginLauncher implements types.IGameStore {
                 // Uninstalling Origin games does NOT remove manifest files, we need
                 //  to ensure that the installer data file exists before we do anything.
                 return fs.statAsync(installerFilepath).then(() =>
-                  Promise.any([this.getGameNameDiP(installerFilepath),
-                               this.getGameName(installerFilepath)]))
+                  Bluebird.any([this.getGameName(installerFilepath, 'DiPManifest'),
+                                this.getGameName(installerFilepath, 'default')]))
                   .then(name => {
                     // We found the name.
                     const launcherEntry: types.IGameStoreEntry = {
