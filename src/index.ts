@@ -123,14 +123,12 @@ class OriginLauncher implements types.IGameStore {
     });
   }
 
-  private async getGameName(installerPath: string, manifestType: ManifestType, customEncoding?: 'ucs2'): Promise<string> {
-    const installerData = await fs.readFileAsync(installerPath, { encoding: customEncoding || 'utf8' });
+  private async getGameName(installerPath: string, manifestType: ManifestType): Promise<string> {
+    const installerData = await fs.readFileAsync(installerPath)
     let xmlDoc;
     try {
       xmlDoc = await parseStringPromise(installerData);
     } catch (err) {
-      // For some reason, some of the Origin manifests can be encoded as UTF-16 LE BOM which means we'd need to parse the file as ucs2, not utf8.
-      if (!customEncoding && err.message.includes('Non-whitespace before first tag.')) return this.getGameName(installerPath, manifestType, 'ucs2');
       return Promise.reject(err);
     }
 
