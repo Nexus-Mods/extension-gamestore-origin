@@ -124,7 +124,7 @@ class OriginLauncher implements types.IGameStore {
   }
 
   private async getGameName(installerPath: string, manifestType: ManifestType): Promise<string> {
-    const installerData = await fs.readFileAsync(installerPath)
+    const installerData = await fs.readFileBOM(installerPath, 'utf8')
     let xmlDoc;
     try {
       xmlDoc = await parseStringPromise(installerData);
