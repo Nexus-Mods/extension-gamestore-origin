@@ -11,6 +11,8 @@ import turbowalk, { IEntry } from 'turbowalk';
 import { fs, log, types, util } from 'vortex-api';
 
 const STORE_ID = 'origin';
+const STORE_NAME = 'Origin';
+const STORE_PRIORITY = 50;
 const MANIFEST_EXT = '.mfst';
 
 const INSTALLER_DATA = path.join('__Installer', 'installerdata.xml');
@@ -37,12 +39,13 @@ export class MissingXMLElementError extends Error {
 //  companies.
 export declare type ManifestType = 'DiPManifest' | 'default';
 class OriginLauncher implements types.IGameStore {
-  public id: string;
+  public id: string = STORE_ID;
+  public name: string = STORE_NAME;
+  public priority: number = STORE_PRIORITY;
   private mClientPath: Promise<string>;
   private mCache: Promise<types.IGameStoreEntry[]>;
 
   constructor() {
-    this.id = STORE_ID;
     if (process.platform === 'win32') {
       try {
         const clientPath = winapi.RegGetValue('HKEY_LOCAL_MACHINE',
